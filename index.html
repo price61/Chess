@@ -204,6 +204,14 @@
   .promo-btn{ width:56px; height:56px; border-radius:var(--radius-sm); border:1px solid var(--border-soft); background:var(--bg-panel); font-size:30px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--bone); }
   .promo-btn:hover, .promo-btn:focus-visible{ border-color:var(--ember); background:rgba(255,122,26,0.1); outline:none; }
 
+  /* ---------- Music Toggle Button ---------- */
+  .music-toggle {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    z-index: 10;
+  }
+
   /* ---------- Chat Box ---------- */
   .chat-box {
     position: fixed;
@@ -265,6 +273,8 @@
 
   <!-- MENU SCREEN -->
   <section id="screen-menu" class="screen active">
+    <!-- Music controller -->
+    <button class="btn-ghost music-toggle" id="bg-music-btn" type="button">🎵 Music: Off</button>
     <div class="menu-wrap">
       <p class="eyebrow">FOXOff Arcade</p>
       <h1 class="title">Choose Your Battle</h1>
@@ -429,9 +439,106 @@
   <input type="text" id="chat-input" class="chat-input" placeholder="Type a message..." autocomplete="off">
 </div>
 
+<!-- Background Music Element -->
+<audio id="bg-music" loop src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"></audio>
+
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>
 "use strict";
+
+/* =========================================================
+   SOUND ENGINE (Web Audio API)
+   ========================================================= */
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playSound(type) {
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+  
+  const osc = audioCtx.createOscillator();
+  const gainNode = audioCtx.createGain();
+  osc.connect(gainNode);
+  gainNode.connect(audioCtx.destination);
+
+  const now = audioCtx.currentTime;
+
+  if (type === 'move') {
+    // Short Blip sound for piece moves
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(400, now);
+    osc.frequency.exponentialRampToValueAtTime(800, now + 0.08);
+    gainNode.gain.setValueAtTime(0.15, now);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+    osc.start(now);
+    osc.stop(now + 0.08);
+  } 
+  else if (type === 'click') {
+    // Button Click sound
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(600, now);
+    gainNode.gain.setValueAtTime(0.1, now);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+    osc.start(now);
+    osc.stop(now + 0.05);
+  } 
+  else if (type === 'chat') {
+    // Ping sound for chat message
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(523.25, now); // C5
+    osc.frequency.setValueAtTime(659.25, now + 0.08); // E5
+    gainNode.gain.setValueAtTime(0.2, now);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+    osc.start(now);
+    osc.stop(now + 0.25);
+  }
+  else if (type === 'win') {
+    // Happy fan-fare chord
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(261.63, now); // C4
+    osc.frequency.setValueAtTime(329.63, now + 0.1); // E4
+    osc.frequency.setValueAtTime(392.00, now + 0.2); // G4
+    osc.frequency.setValueAtTime(523.25, now + 0.3); // C5
+    gainNode.gain.setValueAtTime(0.2, now);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
+    osc.start(now);
+    osc.stop(now + 0.6);
+  } 
+  else if (type === 'lose') {
+    // Sad descending tone
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(300, now);
+    osc.frequency.linearRampToValueAtTime(120, now + 0.5);
+    gainNode.gain.setValueAtTime(0.15, now);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+    osc.start(now);
+    osc.stop(now + 0.5);
+  }
+}
+
+// Global Music Controls
+const bgMusic = document.getElementById('bg-music');
+const bgMusicBtn = document.getElementById('bg-music-btn');
+bgMusic.volume = 0.2; // Set BGM volume lower
+
+bgMusicBtn.addEventListener('click', function() {
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  if (bgMusic.paused) {
+    bgMusic.play().catch(e => console.log("Audio play blocked"));
+    bgMusicBtn.textContent = "🎵 Music: On";
+  } else {
+    bgMusic.pause();
+    bgMusicBtn.textContent = "🎵 Music: Off";
+  }
+});
+
+// Hook into all button clicks for generic click sound
+document.addEventListener('click', function(e) {
+  if (e.target.tagName === 'BUTTON' || e.target.closest('button') || e.target.classList.contains('portal')) {
+    playSound('click');
+  }
+});
+
 
 /* =========================================================
    SHARED HELPERS
@@ -972,7 +1079,7 @@ function checkersMinimax(state, depth, alpha, beta) {
   return best;
 }
 
-function pickAICheckersMove(state, difficulty) {
+ function pickAICheckersMove(state, difficulty) {
   const aiColor = state.turn;
   const result = getLegalMovesForCheckers(state);
   const moves = flattenCheckersMoves(result.byPiece);
@@ -1019,10 +1126,15 @@ function showScreen(id) {
 }
 
 function hideEndOverlay() { document.getElementById('end-overlay').classList.add('hidden'); }
-function showEndOverlay(title, sub) {
+function showEndOverlay(title, sub, soundType) {
   document.getElementById('end-title').textContent = title;
   document.getElementById('end-sub').textContent = sub;
   document.getElementById('end-overlay').classList.remove('hidden');
+  
+  // Play game end sounds (win / lose)
+  if (soundType) {
+    playSound(soundType);
+  }
 }
 
 /* ---------------- CHESS UI ---------------- */
@@ -1130,6 +1242,9 @@ function finalizeChessMove(move, promoChoice, fromNetwork) {
   chessSelected = null;
   chessLegalForSelected = [];
 
+  // Play Piece Move Sound
+  playSound('move');
+
   logChessMove(move, movingPiece, isCapture, promoChoice);
   renderCapturedChessPieces();
 
@@ -1141,10 +1256,16 @@ function finalizeChessMove(move, promoChoice, fromNetwork) {
   if (status === 'checkmate') {
     chessGameOver = true;
     const winner = opponent(chessState.turn);
-    showEndOverlay('Checkmate', (winner === 'w' ? 'White' : 'Black') + ' wins the game');
+    
+    // Check if player won or lost
+    let soundType = 'win';
+    if ((chessAIDifficulty && winner === 'b') || (chessOnline && winner !== chessNetColor)) {
+      soundType = 'lose';
+    }
+    showEndOverlay('Checkmate', (winner === 'w' ? 'White' : 'Black') + ' wins the game', soundType);
   } else if (status === 'stalemate') {
     chessGameOver = true;
-    showEndOverlay('Stalemate', 'No legal moves remain — the game is a draw');
+    showEndOverlay('Stalemate', 'No legal moves remain — the game is a draw', 'lose');
   } else {
     updateChessTurnIndicator(status);
     if (chessAIDifficulty && chessState.turn === CHESS_AI_COLOR) scheduleChessAIMove();
@@ -1316,6 +1437,9 @@ function finalizeCheckersMove(move, fromNetwork) {
   checkersLastMove = move;
   renderCapturedCheckersPieces();
 
+  // Play Piece Move Sound
+  playSound('move');
+
   if (checkersOnline && !fromNetwork) sendOnlineData({ kind: 'move', move: move });
 
   if (result.continued) {
@@ -1334,7 +1458,13 @@ function finalizeCheckersMove(move, fromNetwork) {
   if (status.over) {
     checkersGameOver = true;
     const winnerLabel = status.winner === 'p1' ? 'Orange' : 'Ivory';
-    showEndOverlay('Game Over', winnerLabel + ' wins — the opponent has no moves left');
+    
+    // Check if player won or lost
+    let soundType = 'win';
+    if ((checkersAIDifficulty && status.winner === 'p2') || (checkersOnline && status.winner !== checkersNetColor)) {
+      soundType = 'lose';
+    }
+    showEndOverlay('Game Over', winnerLabel + ' wins — the opponent has no moves left', soundType);
   } else {
     updateCheckersTurnIndicator(false);
     if (checkersAIDifficulty && checkersState.turn === CHECKERS_AI_COLOR) scheduleCheckersAIMove();
@@ -1370,7 +1500,10 @@ function performAICheckersTurn() {
   if (status.over) {
     checkersGameOver = true;
     const winnerLabel = status.winner === 'p1' ? 'Orange' : 'Ivory';
-    showEndOverlay('Game Over', winnerLabel + ' wins — the opponent has no moves left');
+    
+    let soundType = 'win';
+    if (status.winner === 'p2') soundType = 'lose';
+    showEndOverlay('Game Over', winnerLabel + ' wins — the opponent has no moves left', soundType);
   } else {
     updateCheckersTurnIndicator(false);
   }
@@ -1481,9 +1614,8 @@ function joinRoom(code) {
 }
 
 function beginOnlineGame(gameType, role) {
-  // Show chat box when game starts
   document.getElementById('chat-box').classList.remove('hidden');
-  document.getElementById('chat-messages').innerHTML = ''; // Clear old chats
+  document.getElementById('chat-messages').innerHTML = ''; 
   
   if (gameType === 'chess') {
     chessOnline = true;
@@ -1505,14 +1637,15 @@ function handleOnlineData(data) {
     if (chessOnline) startChess(null);
     else if (checkersOnline) startCheckers(null);
   } else if (data.kind === 'chat') {
-    // Chat message eka aawama display karanna
+    // Message eka aawama display karala Ping sound ekak play කරනවා
     displayChatMessage("Opponent", data.text);
+    playSound('chat');
   }
 }
 
 function handleOnlineDisconnect() {
-  if (chessOnline && !chessGameOver) { chessGameOver = true; showEndOverlay('Disconnected', 'Your friend has left the game.'); }
-  if (checkersOnline && !checkersGameOver) { checkersGameOver = true; showEndOverlay('Disconnected', 'Your friend has left the game.'); }
+  if (chessOnline && !chessGameOver) { chessGameOver = true; showEndOverlay('Disconnected', 'Your friend has left the game.', 'lose'); }
+  if (checkersOnline && !checkersGameOver) { checkersGameOver = true; showEndOverlay('Disconnected', 'Your friend has left the game.', 'lose'); }
 }
 
 document.getElementById('online-create-btn').addEventListener('click', function () {
@@ -1587,7 +1720,6 @@ document.addEventListener('click', function (e) {
     chessOnline = false;
     checkersOnline = false;
     hideEndOverlay();
-    // Hide chat box when returning to menu
     document.getElementById('chat-box').classList.add('hidden');
     showScreen('screen-menu');
   }
@@ -1625,7 +1757,6 @@ document.getElementById('chat-input').addEventListener('keypress', function (e) 
   if (e.key === 'Enter' && this.value.trim() !== '') {
     const text = this.value.trim();
     displayChatMessage("You", text);
-    // Send data via existing PeerJS connection
     sendOnlineData({ kind: 'chat', text: text }); 
     this.value = '';
   }
