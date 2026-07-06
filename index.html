@@ -89,7 +89,7 @@
     flex-direction:column;
     align-items:center;
     gap:12px;
-    transition:transform .25s ease, box-shadow .25s ease, border-color .25s ease;
+    transition:transform .4s ease, box-shadow .4s ease, border-color .4s ease;
     font-family:inherit;
   }
   .portal:hover, .portal:focus-visible{
@@ -115,7 +115,7 @@
   .btn-ghost{
     background:transparent; border:1px solid var(--border-soft); color:var(--bone-dim);
     padding:9px 18px; border-radius:999px; font-size:13px; cursor:pointer;
-    transition:all .2s ease; font-family:inherit;
+    transition:all .35s ease; font-family:inherit;
   }
   .btn-ghost:hover, .btn-ghost:focus-visible{ color:var(--bone); border-color:var(--ember-dim); background:rgba(255,122,26,0.08); outline:none; }
 
@@ -151,7 +151,7 @@
 
   .chess-piece{ font-size:min(9vw,46px); line-height:1; pointer-events:none; position:relative; z-index:1; }
   .piece-w{ color:#f4efe4; text-shadow:-1px -1px 1px rgba(0,0,0,0.55), 1px -1px 1px rgba(0,0,0,0.55), -1px 1px 1px rgba(0,0,0,0.55), 1px 1px 1px rgba(0,0,0,0.55), 0 0 10px rgba(255,255,255,0.15); }
-  .piece-b{ color:#141009; text-shadow:-1px -1px 1px rgba(255,122,26,0.4), 1px -1px 1px rgba(255,122,26,0.4), -1px 1px 1px rgba(255,122,26,0.4), 1px 1px 1px rgba(255,122,26,0.4), 0 0 8px rgba(255,122,26,0.12); }
+  .piece-b{ color:#0d0904; text-shadow:-1.5px -1.5px 0 rgba(255,138,45,0.9), 1.5px -1.5px 0 rgba(255,138,45,0.9), -1.5px 1.5px 0 rgba(255,138,45,0.9), 1.5px 1.5px 0 rgba(255,138,45,0.9), 0 0 16px rgba(255,122,26,0.55); }
 
   .checker{ width:78%; height:78%; border-radius:50%; position:relative; z-index:1; box-shadow:0 6px 14px rgba(0,0,0,0.5), inset 0 2px 4px rgba(255,255,255,0.18), inset 0 -4px 8px rgba(0,0,0,0.35); }
   .checker.p1{ background:radial-gradient(circle at 35% 28%, #ffb066, var(--ember) 55%, var(--ember-dim) 100%); }
@@ -524,7 +524,7 @@ bgMusic.volume = 0.2; // Set BGM volume lower
 bgMusicBtn.addEventListener('click', function() {
   if (audioCtx.state === 'suspended') audioCtx.resume();
   if (bgMusic.paused) {
-    bgMusic.play().catch(e => console.log("Audio play blocked"));
+    bgMusic.play().catch(function () {});
     bgMusicBtn.textContent = "🎵 Music: On";
   } else {
     bgMusic.pause();
@@ -1282,7 +1282,7 @@ function scheduleChessAIMove() {
     chessAIThinking = false;
     if (!move) return;
     finalizeChessMove(move, move.promotion ? 'q' : undefined);
-  }, 450);
+  }, 950);
 }
 
 function logChessMove(move, movingPiece, isCapture, promoChoice) {
@@ -1479,7 +1479,7 @@ function scheduleCheckersAIMove() {
     if (checkersGameOver) { checkersAIThinking = false; return; }
     performAICheckersTurn();
     checkersAIThinking = false;
-  }, 450);
+  }, 950);
 }
 
 function performAICheckersTurn() {
@@ -1490,6 +1490,7 @@ function performAICheckersTurn() {
     const res = commitCheckersMove(checkersState, move);
     checkersLastMove = move;
     renderCapturedCheckersPieces();
+    playSound('move');
     if (!res.continued) break;
   }
   checkersSelected = null;
